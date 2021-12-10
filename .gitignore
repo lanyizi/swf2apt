@@ -25,3 +25,4 @@ Debug
 /eaf2apt/*.dat
 /eaf2apt/*.xml
 /eaf2apt/Properties/launchSettings.json
+/compiled

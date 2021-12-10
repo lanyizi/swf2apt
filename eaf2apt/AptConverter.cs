@@ -156,11 +156,61 @@ namespace eaf2apt
                 }
             }
         }
+        static int RunFlasm(string input, string output, string ra3)
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "flasm",
+                Arguments = $"\"{input}\" \"{output}\" {ra3}",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+            process.OutputDataReceived += (s, e) => Console.WriteLine(e.Data);
+            process.ErrorDataReceived += (s, e) => Console.WriteLine(e.Data);
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+            {
+                Console.WriteLine("Error: flasm failed with exit code " + process.ExitCode);
+            }
+            var resultName = output + ".result";
+            try
+            {
+                return int.Parse(File.ReadAllText(resultName));
+            }
+            catch (Exception e)
+            {
+                if (process.ExitCode == 0)
+                {
+                    // if it already failed, then we don't need to report error twice
+                    Console.WriteLine("Error: failed to retrieve flasm result: " + e.Message);
+                }
+                return -1;
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(resultName);
+                }
+                catch { }
+            }
+        }
 
         public void ConvertToApt(string filename, bool optimize, bool isra3)
         {
             string basename = filename;
             basename = Path.ChangeExtension(basename, null);
+
+            Console.WriteLine($"Converting {filename} to apt...");
+            var swfBytes = HashReader.ReadSwf(filename, basename, out bool isChanged);
+            if (!isChanged)
+            {
+                Console.WriteLine($"Skipped {basename} because swf is not changed");
+                return;
+            }
+
             if (optimize)
             {
                 if (Path.GetExtension(filename) != ".eaf")
@@ -171,20 +221,16 @@ namespace eaf2apt
                         ra3 = "--ra3";
                     }
                     string optname = basename + ".eaf";
-                    var process = Process.Start("flasm", @$"{filename} {optname} {ra3}");
-                    process.WaitForExit();
-                    int last = process.ExitCode;
-                    process = Process.Start("flasm", @$"{optname} {optname} {ra3}");
-                    process.WaitForExit();
-                    int current = process.ExitCode;
+                    Console.WriteLine("Optimizing...");
+                    var last = RunFlasm(filename, optname, ra3);
+                    int current = RunFlasm(optname, optname, ra3);
                     while (last != current)
                     {
                         last = current;
-                        process = Process.Start("flasm", @$"{optname} {optname} {ra3}");
-                        process.WaitForExit();
-                        current = process.ExitCode;
+                        Console.WriteLine("Optimizing...");
+                        current = RunFlasm(optname, optname, ra3);
                     }
-                    filename = optname;
+                    swfBytes = File.ReadAllBytes(optname);
                 }
             }
             GlobalData = new Globals();
@@ -219,7 +265,7 @@ namespace eaf2apt
             Directory.CreateDirectory(GlobalData.soundsdir);
             Directory.CreateDirectory(GlobalData.videodir);
             Directory.CreateDirectory(GlobalData.artdir);
-            using (var source = File.Open(filename, FileMode.Open, FileAccess.Read))
+            using (var source = new MemoryStream(swfBytes))
             {
                 var swf = SwfFile.ReadFrom(source);
                 List<SwfTagBase> CharacterList = new();
@@ -396,7 +442,7 @@ namespace eaf2apt
                 }
                 FindButtonHitTest();
                 AptCharacterAnimation a;
-                using FileStream outfile = new FileStream(basename + ".apt", FileMode.Create);
+                using (FileStream outfile = new FileStream(basename + ".apt", FileMode.Create))
                 {
                     GlobalData.output.curpass = 0;
                     string tag = "Apt Data:" + (char)(swf.FileInfo.Version + 48) + "4\u001A\0";
@@ -465,7 +511,7 @@ namespace eaf2apt
                     outfile.Write(GlobalData.output.GetBuffer());
                     GlobalData.output.curpass = 0;
                 }
-                using FileStream outfile2 = new FileStream(basename + ".const", FileMode.Create);
+                using (FileStream outfile2 = new FileStream(basename + ".const", FileMode.Create))
                 {
                     GlobalData.output.SetInitialValue("Apt constant file\u001A\0");
                     GlobalData.MaxPasses = 1;
@@ -482,23 +528,21 @@ namespace eaf2apt
                     ShapeIDs.Add(s.outid.ToString());
                     s.WriteShapeFile();
                 }
-                using FileStream outfile3 = new FileStream(basename + ".dat", FileMode.Create);
+                using (FileStream outfile3 = new FileStream(basename + ".dat", FileMode.Create))
+                using (StreamWriter sr = new StreamWriter(outfile3))
                 {
-                    using StreamWriter sr = new StreamWriter(outfile3);
+                    sr.WriteLine("; Created by AptToXML.");
+                    foreach (var s in NoPackedStrings)
                     {
-                        sr.WriteLine("; Created by AptToXML.");
-                        foreach (var s in NoPackedStrings)
-                        {
-                            sr.WriteLine(s);
-                        }
-                        sr.WriteLine("; Created by AptToXML.");
-                        foreach (var s in PackedStrings)
-                        {
-                            sr.WriteLine(s);
-                        }
+                        sr.WriteLine(s);
+                    }
+                    sr.WriteLine("; Created by AptToXML.");
+                    foreach (var s in PackedStrings)
+                    {
+                        sr.WriteLine(s);
                     }
                 }
-                using FileStream outfile4 = new FileStream(basename + ".xml", FileMode.Create);
+                using (FileStream outfile4 = new FileStream(basename + ".xml", FileMode.Create))
                 {
                     string fname = Path.GetFileName(basename);
                     using StreamWriter sr = new StreamWriter(outfile4);
@@ -519,6 +563,9 @@ namespace eaf2apt
                     }
                     sr.WriteLine("</AssetDeclaration>");
                 }
+
+                HashReader.SaveHashes(filename, basename, swfBytes);
+                Console.WriteLine($"Successfully converted {filename} into apt.");
             }
         }
     }

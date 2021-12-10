@@ -222,7 +222,7 @@ namespace eaf2apt.Characters
         bool FindEdgeForTriangle(ShapePotentialTriangle tri, List<ShapePotentialTriangle> trilist, out ShapeEdgeData data)
         {
             Dictionary<int, bool> visited = new();
-            again:
+        again:
             if (tri.edgedata.Count > 0)
             {
                 data = tri.edgedata[0];
@@ -297,74 +297,82 @@ namespace eaf2apt.Characters
                     ofilesr.WriteLine("0");
                 }
             }
-            var process = Process.Start("triangle", @$"-Q -P -c -n -p {name}.poly");
+            using var process = Process.Start("triangle", $"-Q -P -c -n -p \"{name}.poly\"");
             process.WaitForExit();
-            using FileStream node = new FileStream(name + ".1.node", FileMode.Open);
+            static FileStream OpenFileDeleteOnClose(string path, bool allowFailure = false)
             {
-                using FileStream ele = new FileStream(name + ".1.ele", FileMode.Open);
+                try
                 {
-                    using FileStream neigh = new FileStream(name + ".1.neigh", FileMode.Open);
+                    return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
+                }
+                catch when(allowFailure)
+                {
+                    return null;
+                }
+            }
+            using IDisposable deletePolyOnClose = OpenFileDeleteOnClose(name + ".poly", true);
+            using IDisposable deleteNodeOnClose = OpenFileDeleteOnClose(name + ".1.node", true);
+            using IDisposable deleteEleOnClose = OpenFileDeleteOnClose(name + ".1.ele", true);
+            using IDisposable deleteNeighOnClose = OpenFileDeleteOnClose(name + ".1.neigh", true);
+            if (process.ExitCode != 0)
+            {
+                Console.WriteLine("Error: triangle.exe failed with exit code " + process.ExitCode);
+            }
+
+            {
+                using FileStream node = OpenFileDeleteOnClose(name + ".1.node");
+                using FileStream ele = OpenFileDeleteOnClose(name + ".1.ele");
+                using FileStream neigh = OpenFileDeleteOnClose(name + ".1.neigh");
+                using StreamReader noder = new StreamReader(node);
+                using StreamReader eler = new StreamReader(ele);
+                using StreamReader neighr = new StreamReader(neigh);
+
+                string nodeheader = noder.ReadLine();
+                string eleheader = eler.ReadLine();
+                string neighheader = neighr.ReadLine();
+                string[] nodeheaders = Regex.Split(nodeheader, "\\s+");
+                string[] eleheaders = Regex.Split(eleheader, "\\s+");
+                string[] neighheaders = Regex.Split(neighheader, "\\s+");
+                int vertices = Convert.ToInt32(nodeheaders[0]);
+                if (points.Count != vertices)
+                {
+                    for (int i = 0; i < vertices; i++)
                     {
-                        using StreamReader noder = new StreamReader(node);
+                        string nodel = noder.ReadLine();
+                        nodel = nodel.TrimStart();
+                        string[] coords = Regex.Split(nodel, "\\s+");
+                        if (i >= points.Count)
                         {
-                            using StreamReader eler = new StreamReader(ele);
-                            {
-                                using StreamReader neighr = new StreamReader(neigh);
-                                {
-                                    string nodeheader = noder.ReadLine();
-                                    string eleheader = eler.ReadLine();
-                                    string neighheader = neighr.ReadLine();
-                                    string[] nodeheaders = Regex.Split(nodeheader, "\\s+");
-                                    string[] eleheaders = Regex.Split(eleheader, "\\s+");
-                                    string[] neighheaders = Regex.Split(neighheader, "\\s+");
-                                    int vertices = Convert.ToInt32(nodeheaders[0]);
-                                    if (points.Count != vertices)
-                                    {
-                                        for (int i = 0; i < vertices; i++)
-                                        {
-                                            string nodel = noder.ReadLine();
-                                            nodel = nodel.TrimStart();
-                                            string[] coords = Regex.Split(nodel, "\\s+");
-                                            if (i >= points.Count)
-                                            {
-                                                FloatVector v;
-                                                v.X = Convert.ToDouble(coords[1]);
-                                                v.Y = Convert.ToDouble(coords[2]);
-                                                points.Add(v);
-                                            }
-                                        }
-                                    }
-                                    int triangles = Convert.ToInt32(eleheaders[0]);
-                                    for (int i = 0; i < triangles; i++)
-                                    {
-                                        string elel = eler.ReadLine();
-                                        string neighl = neighr.ReadLine();
-                                        elel = elel.TrimStart();
-                                        neighl = neighl.TrimStart();
-                                        string[] verts = Regex.Split(elel, "\\s+");
-                                        string[] neighs = Regex.Split(neighl, "\\s+");
-                                        ShapePotentialTriangle triangle = new();
-                                        triangle.points[0] = points[Convert.ToInt32(verts[1])];
-                                        triangle.points[1] = points[Convert.ToInt32(verts[2])];
-                                        triangle.points[2] = points[Convert.ToInt32(verts[3])];
-                                        triangle.pointindices[0] = Convert.ToInt32(verts[1]);
-                                        triangle.pointindices[1] = Convert.ToInt32(verts[2]);
-                                        triangle.pointindices[2] = Convert.ToInt32(verts[3]);
-                                        triangle.neighbors[0] = Convert.ToInt32(neighs[1]);
-                                        triangle.neighbors[1] = Convert.ToInt32(neighs[2]);
-                                        triangle.neighbors[2] = Convert.ToInt32(neighs[3]);
-                                        potentialtriangles.Add(triangle);
-                                    }
-                                }
-                            }
+                            FloatVector v;
+                            v.X = Convert.ToDouble(coords[1]);
+                            v.Y = Convert.ToDouble(coords[2]);
+                            points.Add(v);
                         }
                     }
                 }
+                int triangles = Convert.ToInt32(eleheaders[0]);
+                for (int i = 0; i < triangles; i++)
+                {
+                    string elel = eler.ReadLine();
+                    string neighl = neighr.ReadLine();
+                    elel = elel.TrimStart();
+                    neighl = neighl.TrimStart();
+                    string[] verts = Regex.Split(elel, "\\s+");
+                    string[] neighs = Regex.Split(neighl, "\\s+");
+                    ShapePotentialTriangle triangle = new();
+                    triangle.points[0] = points[Convert.ToInt32(verts[1])];
+                    triangle.points[1] = points[Convert.ToInt32(verts[2])];
+                    triangle.points[2] = points[Convert.ToInt32(verts[3])];
+                    triangle.pointindices[0] = Convert.ToInt32(verts[1]);
+                    triangle.pointindices[1] = Convert.ToInt32(verts[2]);
+                    triangle.pointindices[2] = Convert.ToInt32(verts[3]);
+                    triangle.neighbors[0] = Convert.ToInt32(neighs[1]);
+                    triangle.neighbors[1] = Convert.ToInt32(neighs[2]);
+                    triangle.neighbors[2] = Convert.ToInt32(neighs[3]);
+                    potentialtriangles.Add(triangle);
+                }
             }
-            File.Delete(name + ".poly");
-            File.Delete(name + ".1.node");
-            File.Delete(name + ".1.ele");
-            File.Delete(name + ".1.neigh");
+
             Dictionary<int, List<ShapeEdge>> pointtoedge = new();
             for (int i = 0; i < edges.Count; i++)
             {

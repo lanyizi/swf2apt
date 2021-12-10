@@ -27,6 +27,7 @@ int swfVersion;
 
 char *inputName;				/* actual command-line parameter */
 char outputName[512];
+char outputResultName[512];		/* holds the result (printActionRecordCallCount) of disassembly */
 static char *updateName = NULL;	/* swf file name found in disassembly's first line (movie foo.swf...) */
 static char *tempName = NULL;	/* temporary file during assembling */
 static char *flmName = NULL;	/* temporary disassembly during update */
@@ -1664,6 +1665,8 @@ static void parseArgs(int argc, char *argv[])
 		inputName = mstrdup(NULL);
 		strcpy(inputName, argv[1]);
 		strcpy(outputName, argv[2]);
+		strcpy(outputResultName, outputName);
+		strcat(outputResultName, ".result");
 
 #if 0
 		/* join all arguments into one string - to support spaces in file names */
@@ -1770,6 +1773,8 @@ int main(int argc, char *argv[])
 
 	parseArgs(argc, argv);
 
+	remove(outputResultName);
+
 	if (mode == MODE_DISASSEMBLE) {
 		FILE *stdoutTempFile;
 
@@ -1789,7 +1794,7 @@ int main(int argc, char *argv[])
 		if (strcmp(swfHeader, "FWS") != 0) {
 			if (strcmp(swfHeader, "CWS") != 0) {
 				tellUser(1, "Input file doesn't appear to be an SWF file..");
-				mexit(1);
+				mexit(EXIT_FAILURE);
 			}
 			else {
 				decompressSWF(file, inputName);
@@ -1822,7 +1827,10 @@ int main(int argc, char *argv[])
 		yyparse();
 		
 		fclose(eafFile);
-		exit(printActionRecordCallCount);
+
+		FILE *resultFile = fopen(outputResultName, "w");
+		fprintf(resultFile, "%d\n", printActionRecordCallCount);
+		fclose(resultFile);
 	}
 
 	mexit(EXIT_SUCCESS);
