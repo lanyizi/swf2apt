@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <Nullable>disable</Nullable>
     <Platforms>x86</Platforms>
     <PlatformTarget>x86</PlatformTarget>
@@ -26,13 +26,13 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Targets>Build;DebugSymbolsProjectOutputGroup</Targets>
     </ProjectReference>
-    <ProjectReference Include="..\libjpeg\jpeg.vcxproj" >
+    <ProjectReference Include="..\libjpeg\jpeg.vcxproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <OutputItemType>Content</OutputItemType>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Targets>Build;DebugSymbolsProjectOutputGroup</Targets>
     </ProjectReference>
-    <ProjectReference Include="..\triangle\triangle.vcxproj" >
+    <ProjectReference Include="..\triangle\triangle.vcxproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <OutputItemType>Content</OutputItemType>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

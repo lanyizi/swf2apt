@@ -20,7 +20,7 @@ namespace SwfLib.Shapes.FillStyles {
                 case FillStyleType.NonSmoothedClippedBitmap:
                     return new BitmapFillStyleRGB { Smoothing = false, Mode = BitmapMode.Clip};
                 default:
-                    throw new NotSupportedException();
+                    throw new NotSupportedException($"{nameof(FillStyleType)}: {type}");
             }
         }
 
